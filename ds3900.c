@@ -547,6 +547,52 @@ int main(int argc, const char *argv[])
 		}
 
 		rc = do_ds3900_set(fd, dev, reg, val, width);
+	} else if (!strcmp("thrash-pages", subcmd)) {
+		const char *dev_str;
+		unsigned long dev;
+		bool match;
+		unsigned i;
+		int page;
+
+		if (argc < 4) {
+			help(argv[0]);
+			rc = EXIT_FAILURE;
+			goto cleanup_fd;
+		}
+
+		dev_str = argv[3];
+		dev = strtoul(dev_str, NULL, 0);
+
+		rc = ds3900_packet_device_address(fd, dev);
+		if (rc < 0) {
+			fprintf(stderr, "Failed to set device address: %s", strerror(-rc));
+			rc = EXIT_FAILURE;
+			goto cleanup_fd;
+		}
+
+		page = 0;
+		match = true;
+		for (i = 0; match; i++) {
+			if (!(i % 100))
+				printf("%u\n", i);
+
+			rc = ds3900_smbus_write_byte(fd, 0, page);
+			if (rc < 0) {
+				fprintf(stderr, "Failed to set page: %s", strerror(-rc));
+				break;
+			}
+			rc = ds3900_smbus_read_byte(fd, 0);
+			if (rc < 0) {
+				fprintf(stderr, "Failed to get page: %s", strerror(-rc));
+				break;
+			}
+			match = rc == page;
+			if (!match)
+				fprintf(stderr,
+					"Page mismatch found at iteration %u: set %u, read %u\n",
+					i, page, rc);
+			page = (page + 1) % 22;
+		}
 	} else {
 		help(argv[0]);
 		rc = EXIT_FAILURE;
