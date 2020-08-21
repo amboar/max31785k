@@ -147,6 +147,8 @@ static void help(const char *name)
 	fprintf(stderr, "USAGE: %s HIDRAW SUBCOMMAND\n", name);
 }
 
+static const uint8_t max31785_address = 0x52;
+
 int main(int argc, const char *argv[])
 {
 	const char *subcmd;
@@ -170,9 +172,10 @@ int main(int argc, const char *argv[])
 
 	if (!strcmp("revision", subcmd)) {
 		rc = do_ds3900_revision(fd);
-	} else if (!strcmp("device", subcmd)) {
-		const char *dev_str;
-		unsigned long dev;
+	} else if (!strcmp("get", subcmd)) {
+		const char *reg_str, *width_str;
+		unsigned long reg;
+		int width;
 
 		if (argc < 4) {
 			help(argv[0]);
@@ -180,28 +183,11 @@ int main(int argc, const char *argv[])
 			goto cleanup_fd;
 		}
 
-		dev_str = argv[3];
-		dev = strtoul(dev_str, NULL, 0);
-		rc = ds3900_packet_device_address(fd, dev);
-	} else if (!strcmp("get", subcmd)) {
-		const char *dev_str, *reg_str, *width_str;
-		unsigned long dev, reg;
-		int width;
-
-		if (argc < 5) {
-			help(argv[0]);
-			rc = EXIT_FAILURE;
-			goto cleanup_fd;
-		}
-
-		dev_str = argv[3];
-		dev = strtoul(dev_str, NULL, 0);
-
-		reg_str = argv[4];
+		reg_str = argv[3];
 		reg = strtoul(reg_str, NULL, 0);
 
-		if (argc > 5) {
-			width_str = argv[5];
+		if (argc > 4) {
+			width_str = argv[4];
 			width = smbus_parse_width(width_str);
 			if (width < 0) {
 				help(argv[0]);
@@ -212,28 +198,25 @@ int main(int argc, const char *argv[])
 			width = 1;
 		}
 
-		rc = do_ds3900_get(fd, dev, reg, width);
+		rc = do_ds3900_get(fd, max31785_address, reg, width);
 	} else if (!strcmp("set", subcmd)) {
-		const char *dev_str, *reg_str, *val_str, *width_str;
-		unsigned long dev, reg, val;
+		const char *reg_str, *val_str, *width_str;
+		unsigned long reg, val;
 		int width;
 
-		if (argc < 6) {
+		if (argc < 5) {
 			help(argv[0]);
 			rc = EXIT_FAILURE;
 			goto cleanup_fd;
 		}
 
-		dev_str = argv[3];
-		dev = strtoul(dev_str, NULL, 0);
-
-		reg_str = argv[4];
+		reg_str = argv[3];
 		reg = strtoul(reg_str, NULL, 0);
 
-		val_str = argv[5];
+		val_str = argv[4];
 		val = strtoul(val_str, NULL, 0);
 
-		if (argc > 6) {
+		if (argc > 5) {
 			width_str = argv[6];
 			width = smbus_parse_width(width_str);
 			if (width < 0) {
@@ -245,24 +228,19 @@ int main(int argc, const char *argv[])
 			width = 1;
 		}
 
-		rc = do_ds3900_set(fd, dev, reg, val, width);
+		rc = do_ds3900_set(fd, max31785_address, reg, val, width);
 	} else if (!strcmp("thrash-pages", subcmd)) {
-		const char *dev_str;
-		unsigned long dev;
 		bool match;
 		unsigned i;
 		int page;
 
-		if (argc < 4) {
+		if (argc < 3) {
 			help(argv[0]);
 			rc = EXIT_FAILURE;
 			goto cleanup_fd;
 		}
 
-		dev_str = argv[3];
-		dev = strtoul(dev_str, NULL, 0);
-
-		rc = ds3900_packet_device_address(fd, dev);
+		rc = ds3900_packet_device_address(fd, max31785_address);
 		if (rc < 0) {
 			fprintf(stderr, "Failed to set device address: %s", strerror(-rc));
 			rc = EXIT_FAILURE;
@@ -298,9 +276,9 @@ int main(int argc, const char *argv[])
 		goto cleanup_fd;
 	}
 
+cleanup_fd:
 	rc = rc ? EXIT_FAILURE : EXIT_SUCCESS;
 
-cleanup_fd:
 	close(fd);
 
 	exit(rc);
