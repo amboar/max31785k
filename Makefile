@@ -1,7 +1,7 @@
 CFLAGS=-std=gnu11 -Wall -Wextra -Werror -O2
 
-ds3900: ds3900.o
+max31785k: ds3900.o max31785k.o smbus.o
 
 .PHONY: clean
 clean:
-	$(RM) ds3900 ds3900.o
+	$(RM) max31785k ds3900.o max31785k.o smbus.o
