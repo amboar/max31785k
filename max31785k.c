@@ -67,10 +67,7 @@ static int do_ds3900_get(int fd, int dev, int reg, size_t width)
 			printf("0x%02x: ", i);
 
 			for (j = 0; i < rc && j < 16; i++, j++) {
-				if (isprint(data[i]))
-				printf(" %c%s", data[i], rc ? " " : "");
-				else
-					printf("%02x%s", data[i], rc ? " " : "");
+				printf("%02x%s", data[i], rc ? " " : "");
 			}
 
 			printf("\n");
