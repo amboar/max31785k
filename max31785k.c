@@ -2,11 +2,13 @@
 // Copyright (C) 2020 IBM Corp.
 
 #include "ds3900.h"
+#include "pmbus.h"
 #include "smbus.h"
 
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -269,6 +271,156 @@ int main(int argc, const char *argv[])
 					"Page mismatch found at iteration %u: set %u, read %u\n",
 					i, page, rc);
 			page = (page + 1) % 22;
+		}
+	} else if (!strcmp("fan", subcmd)) {
+		if (argc < 5) {
+			help(argv[0]);
+			rc = EXIT_FAILURE;
+			goto cleanup_fd;
+		}
+
+		if (strcmp("speed", argv[3])) {
+			help(argv[0]);
+			rc = EXIT_FAILURE;
+			goto cleanup_fd;
+		}
+
+		if (!strcmp("get", argv[4])) {
+			const char *page_str, *fan_str;
+			enum pmbus_fan_mode mode;
+			int page, fan;
+			int16_t rate;
+
+			if (argc < 7) {
+				help(argv[0]);
+				rc = EXIT_FAILURE;
+				goto cleanup_fd;
+			}
+
+			page_str = argv[5];
+			page = strtoul(page_str, NULL, 0);
+
+			fan_str = argv[6];
+			fan = strtoul(fan_str, NULL, 0);
+
+			rc = ds3900_packet_device_address(fd, max31785_address);
+			if (rc < 0) {
+				fprintf(stderr, "Failed to set device address: %s", strerror(-rc));
+				rc = EXIT_FAILURE;
+				goto cleanup_fd;
+			}
+
+			rc = pmbus_fan_config_get_enabled(fd, page, fan);
+			if (rc < 0) {
+				fprintf(stderr, "pmbus_fan_config_enabled: %d\n", rc);
+				goto cleanup_fd;
+			}
+
+			if (!rc) {
+				fprintf(stderr, "Fan %d:%d is disabled\n", page, fan);
+				goto cleanup_fd;
+			}
+
+			rc = pmbus_fan_config_get_mode(fd, page, fan);
+			if (rc < 0) {
+				fprintf(stderr, "pmbus_fan_config_mode: %d\n", rc);
+				goto cleanup_fd;
+			}
+
+			mode = rc;
+
+			rc = pmbus_fan_command_get(fd, page, fan);
+			if (rc < 0) {
+				fprintf(stderr, "pmbus_get_fan_command: %d\n", rc);
+				goto cleanup_fd;
+			}
+
+			rate = (int16_t)rc;
+			if (mode == pmbus_fan_mode_pwm)
+				rate /= 100;
+
+			rc = pmbus_read_fan_speed(fd, page, fan);
+			if (rc < 0) {
+				fprintf(stderr, "pmbus_fan_speed_get: %d\n", rc);
+				goto cleanup_fd;
+			}
+
+			if (rate < 0)
+				printf("Automatic fan control, measured %dRPM\n", rc);
+			else
+				printf("Commanded %"PRId16"%s, measured %dRPM\n", rate, mode == pmbus_fan_mode_rpm ? "RPM" : "% duty", rc);
+			rc = 0;
+		} else if (!strcmp("set", argv[4])) {
+			const char *page_str, *fan_str, *rate_str;
+			char *mode_str;
+			enum pmbus_fan_mode mode;
+			int page, fan, rate;
+
+			if (argc < 8) {
+				help(argv[0]);
+				rc = EXIT_FAILURE;
+				goto cleanup_fd;
+			}
+
+			page_str = argv[5];
+			page = strtoul(page_str, NULL, 0);
+
+			fan_str = argv[6];
+			fan = strtoul(fan_str, NULL, 0);
+
+			rate_str = argv[7];
+			rate = strtoul(rate_str, &mode_str, 0);
+
+			if (!strlen(mode_str)) {
+				help(argv[0]);
+				rc = EXIT_FAILURE;
+				goto cleanup_fd;
+			}
+
+			if (!strcasecmp("rpm", mode_str)) {
+				mode = pmbus_fan_mode_rpm;
+			} else if (!strcasecmp("%", mode_str)) {
+				mode = pmbus_fan_mode_pwm;
+				rate *= 100;
+			} else {
+				help(argv[0]);
+				rc = EXIT_FAILURE;
+				goto cleanup_fd;
+			}
+
+			rc = ds3900_packet_device_address(fd, max31785_address);
+			if (rc < 0) {
+				fprintf(stderr, "Failed to set device address: %s", strerror(-rc));
+				goto cleanup_fd;
+			}
+
+			rc = pmbus_fan_config_get_enabled(fd, page, fan);
+			if (rc < 0) {
+				fprintf(stderr, "pmbus_fan_config_enabled: %d\n", rc);
+				goto cleanup_fd;
+			}
+
+			if (!rc) {
+				fprintf(stderr, "Fan %d:%d is disabled\n", page, fan);
+				goto cleanup_fd;
+			}
+
+			rc = pmbus_fan_config_set_mode(fd, page, fan, mode);
+			if (rc < 0) {
+				fprintf(stderr, "pmbus_fan_config_set_mode: %d\n", rc);
+				goto cleanup_fd;
+			}
+
+			rc = pmbus_fan_command_set(fd, page, fan, rate);
+			if (rc < 0) {
+				fprintf(stderr, "pmbus_fan_config_set_mode: %d\n", rc);
+				goto cleanup_fd;
+			}
+
+		} else {
+			help(argv[0]);
+			rc = EXIT_FAILURE;
+			goto cleanup_fd;
 		}
 	} else {
 		help(argv[0]);
